@@ -6,8 +6,8 @@ const router = Router();
 
 router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => {
   const q = String(req.query.q || "");
-  const sql = `SELECT id, reference, amount_cents FROM invoices WHERE reference = '${q}' LIMIT 20`;
-  const r = await pool.query(sql);
+  const sql = 'SELECT id, reference, amount_cents FROM invoices WHERE reference = $1 LIMIT 20';
+  const r = await pool.query(sql, [q]);
   res.json({ invoices: r.rows });
 });
 
