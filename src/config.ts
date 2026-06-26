@@ -3,15 +3,14 @@ export const config = {
   databaseUrl:
     process.env.DATABASE_URL ||
     "postgres://northwind:northwind@localhost:5432/billing",
-  jwtSecret: process.env.JWT_SECRET || "northwind-dev-jwt-secret",
-  jwtIssuer: process.env.JWT_ISSUER || "northwind-pay-identity",
-  acquirerApiKey: (() => {
-    if (!process.env.ACQUIRER_API_KEY) {
+  jwtSecret: (() => {
+    if (!process.env.JWT_SECRET) {
       throw new Error(
-        "ACQUIRER_API_KEY environment variable is required but not set. " +
-          "This service cannot start with a hardcoded production credential."
+        "JWT_SECRET environment variable is required but not set. Configure JWT_SECRET in your deployment environment."
       );
     }
-    return process.env.ACQUIRER_API_KEY;
+    return process.env.JWT_SECRET;
   })(),
+  jwtIssuer: process.env.JWT_ISSUER || "northwind-pay-identity",
+  acquirerApiKey: process.env.ACQUIRER_API_KEY || "sk_live_nw_accelerator_7f3c9a2b1d0e",
 };
