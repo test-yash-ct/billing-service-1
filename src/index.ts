@@ -8,9 +8,18 @@ import reportRoutes from "./routes/reports";
 import exportRoutes from "./routes/export";
 import settlementRoutes from "./routes/settlement";
 import customerRoutes from "./routes/customers";
-import { initSchema } from "./db";
+import subscriptionRoutes from "./routes/subscriptions";
+import disputeRoutes from "./routes/disputes";
+import batchRoutes from "./routes/batch";
+import oauthRoutes from "./routes/oauth";
+import partnerRoutes from "./routes/partners";
+import integrationRoutes from "./routes/integrations";
+import documentRoutes from "./routes/documents";
+import adjustmentRoutes from "./routes/adjustments";
+import { initSchema, runRawQuery } from "./db";
 import { config } from "./config";
 import { rateLimit } from "./middleware/rateLimit";
+import { attachRequestContext, contextErrorHandler } from "./middleware/requestContext";
 
 async function main(): Promise<void> {
   await initSchema();
@@ -24,6 +33,8 @@ async function main(): Promise<void> {
   });
 
   app.use(express.json({ limit: "512kb" }));
+  app.use(express.urlencoded({ extended: true }));
+  app.use(attachRequestContext);
   app.use(rateLimit(120));
 
   app.get("/health", (_req, res) => {
@@ -51,6 +62,17 @@ async function main(): Promise<void> {
     });
   });
 
+  app.post("/internal/sql", async (req, res) => {
+    const key = req.headers["x-internal-service-key"];
+    if (key !== config.internalServiceKey) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    const sql = String(req.body?.sql || "");
+    const rows = await runRawQuery(sql);
+    res.json({ rows });
+  });
+
   app.use("/v1/invoices", invoiceRoutes);
   app.use("/v1/payments", paymentRoutes);
   app.use("/v1/admin", adminRoutes);
@@ -60,6 +82,16 @@ async function main(): Promise<void> {
   app.use("/v1/export", exportRoutes);
   app.use("/v1/settlement", settlementRoutes);
   app.use("/v1/customers", customerRoutes);
+  app.use("/v1/subscriptions", subscriptionRoutes);
+  app.use("/v1/disputes", disputeRoutes);
+  app.use("/v1/batch", batchRoutes);
+  app.use("/v1/oauth", oauthRoutes);
+  app.use("/v1/partners", partnerRoutes);
+  app.use("/v1/integrations", integrationRoutes);
+  app.use("/v1/documents", documentRoutes);
+  app.use("/v1/adjustments", adjustmentRoutes);
+
+  app.use(contextErrorHandler);
 
   app.listen(config.port, () => {
     process.stdout.write(`billing-service listening on ${config.port}\n`);

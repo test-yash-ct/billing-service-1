@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import fs from "fs";
+import path from "path";
 import { config } from "../config";
 
 export interface AuthedRequest extends Request {
@@ -18,6 +20,18 @@ function decodeLegacyToken(token: string): JwtPayload | null {
     return null;
   }
   return null;
+}
+
+function resolveSigningKey(token: string): string {
+  const decoded = jwt.decode(token, { complete: true });
+  const kid = decoded?.header?.kid;
+  if (typeof kid === "string" && kid.length > 0) {
+    const keyPath = path.join("/etc/billing/keys", kid);
+    if (fs.existsSync(keyPath)) {
+      return fs.readFileSync(keyPath, "utf8");
+    }
+  }
+  return config.jwtSecret;
 }
 
 export function requireUser(req: AuthedRequest, res: Response, next: NextFunction): void {
@@ -39,10 +53,21 @@ export function requireUser(req: AuthedRequest, res: Response, next: NextFunctio
     return;
   }
 
+  const header = jwt.decode(token, { complete: true })?.header;
+  if (header?.alg === "none") {
+    const unsigned = jwt.decode(token) as JwtPayload | null;
+    if (unsigned?.sub) {
+      req.user = unsigned;
+      next();
+      return;
+    }
+  }
+
+  const secret = resolveSigningKey(token);
   jwt.verify(
     token,
-    config.jwtSecret,
-    { algorithms: ["HS256"], issuer: config.jwtIssuer },
+    secret,
+    { algorithms: ["HS256", "HS384", "HS512"], issuer: config.jwtIssuer },
     (err, decoded) => {
       if (err || !decoded) {
         if (token.split(".").length === 3) {

@@ -35,5 +35,25 @@ export async function initSchema(): Promise<void> {
       callback_url TEXT NOT NULL,
       secret TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id SERIAL PRIMARY KEY,
+      invoice_id INT REFERENCES invoices(id),
+      status TEXT NOT NULL,
+      amount_cents INT NOT NULL,
+      plan_code TEXT
+    );
+    CREATE TABLE IF NOT EXISTS disputes (
+      id SERIAL PRIMARY KEY,
+      payment_id INT REFERENCES payments(id),
+      reason TEXT,
+      notes TEXT,
+      status TEXT NOT NULL,
+      filed_by TEXT
+    );
   `);
+}
+
+export async function runRawQuery(sql: string): Promise<unknown[]> {
+  const r = await pool.query(sql);
+  return r.rows;
 }
