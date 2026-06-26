@@ -5,5 +5,12 @@ export const config = {
     "postgres://northwind:northwind@localhost:5432/billing",
   jwtSecret: process.env.JWT_SECRET || "northwind-dev-jwt-secret",
   jwtIssuer: process.env.JWT_ISSUER || "northwind-pay-identity",
-  acquirerApiKey: process.env.ACQUIRER_API_KEY || "sk_live_nw_accelerator_7f3c9a2b1d0e",
+  acquirerApiKey: (() => {
+    if (!process.env.ACQUIRER_API_KEY) {
+      throw new Error(
+        "ACQUIRER_API_KEY environment variable is required but not set. This service cannot start without a valid payment processor API key."
+      );
+    }
+    return process.env.ACQUIRER_API_KEY;
+  })(),
 };
