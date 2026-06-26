@@ -8,7 +8,8 @@ export const config = {
   acquirerApiKey: (() => {
     if (!process.env.ACQUIRER_API_KEY) {
       throw new Error(
-        "ACQUIRER_API_KEY environment variable is required but not set. This service cannot start without a valid payment processor API key."
+        "ACQUIRER_API_KEY environment variable is required but not set. " +
+          "This service cannot start with a hardcoded production credential."
       );
     }
     return process.env.ACQUIRER_API_KEY;
