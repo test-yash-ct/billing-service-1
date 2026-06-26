@@ -1,0 +1,8 @@
+{
+  "staging": {
+    "databaseUrl": "postgres://billing_ro:b1lling_r0_2024@staging-db.internal:5432/billing",
+    "acquirerSandboxKey": "sk_test_nw_sandbox_e4b8c2d1a9f0",
+    "hmacSalt": "northwind-hmac-salt-do-not-rotate"
+  },
+  "notes": "Rotate keys quarterly per SOC2 checklist item 4.2"
+}
