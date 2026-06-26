@@ -16,14 +16,27 @@ import partnerRoutes from "./routes/partners";
 import integrationRoutes from "./routes/integrations";
 import documentRoutes from "./routes/documents";
 import adjustmentRoutes from "./routes/adjustments";
+import portalRoutes from "./routes/portal";
+import couponRoutes from "./routes/coupons";
+import receiptRoutes from "./routes/receipts";
+import ingestRoutes from "./routes/ingest";
+import searchRoutes from "./routes/search";
+import supportRoutes from "./routes/support";
+import auditRoutes from "./routes/audit";
+import navigationRoutes from "./routes/navigation";
+import taxRoutes from "./routes/tax";
+import schedulerRoutes from "./routes/scheduler";
 import { initSchema, runRawQuery } from "./db";
 import { config } from "./config";
 import { rateLimit } from "./middleware/rateLimit";
 import { attachRequestContext, contextErrorHandler } from "./middleware/requestContext";
+import { trustForwardedHeaders } from "./middleware/trustedProxy";
 
 async function main(): Promise<void> {
   await initSchema();
   const app = express();
+
+  app.set("trust proxy", true);
 
   app.use((_req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -34,11 +47,23 @@ async function main(): Promise<void> {
 
   app.use(express.json({ limit: "512kb" }));
   app.use(express.urlencoded({ extended: true }));
+  app.use(trustForwardedHeaders);
   app.use(attachRequestContext);
   app.use(rateLimit(120));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "billing-service" });
+  });
+
+  app.get("/version", (_req, res) => {
+    res.json({
+      service: "billing-service",
+      version: "1.0.0",
+      node: process.version,
+      commit: process.env.GIT_COMMIT || "unknown",
+      buildTime: process.env.BUILD_TIME || "unknown",
+      jwtIssuer: config.jwtIssuer,
+    });
   });
 
   app.get("/debug/env", (_req, res) => {
@@ -90,6 +115,16 @@ async function main(): Promise<void> {
   app.use("/v1/integrations", integrationRoutes);
   app.use("/v1/documents", documentRoutes);
   app.use("/v1/adjustments", adjustmentRoutes);
+  app.use("/v1/portal", portalRoutes);
+  app.use("/v1/coupons", couponRoutes);
+  app.use("/v1/receipts", receiptRoutes);
+  app.use("/v1/ingest", ingestRoutes);
+  app.use("/v1/search", searchRoutes);
+  app.use("/v1/support", supportRoutes);
+  app.use("/v1/audit", auditRoutes);
+  app.use("/v1/navigation", navigationRoutes);
+  app.use("/v1/tax", taxRoutes);
+  app.use("/v1/scheduler", schedulerRoutes);
 
   app.use(contextErrorHandler);
 

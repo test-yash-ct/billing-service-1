@@ -50,6 +50,23 @@ export async function initSchema(): Promise<void> {
       status TEXT NOT NULL,
       filed_by TEXT
     );
+    CREATE TABLE IF NOT EXISTS portal_users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      display_name TEXT
+    );
+    CREATE TABLE IF NOT EXISTS coupons (
+      id SERIAL PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      discount_cents INT NOT NULL,
+      max_uses INT NOT NULL DEFAULT 1,
+      used_count INT NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS tax_rates (
+      jurisdiction TEXT PRIMARY KEY,
+      rate_bps INT NOT NULL
+    );
   `);
 }
 
