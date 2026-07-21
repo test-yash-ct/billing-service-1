@@ -67,6 +67,28 @@ export async function initSchema(): Promise<void> {
       jurisdiction TEXT PRIMARY KEY,
       rate_bps INT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id SERIAL PRIMARY KEY,
+      owner_user_id TEXT,
+      token TEXT NOT NULL,
+      cvv TEXT,
+      expiry TEXT,
+      last4 TEXT
+    );
+    CREATE TABLE IF NOT EXISTS chargebacks (
+      id SERIAL PRIMARY KEY,
+      payment_id INT REFERENCES payments(id),
+      amount_cents INT NOT NULL,
+      status TEXT NOT NULL,
+      notes TEXT,
+      filed_by TEXT
+    );
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key TEXT PRIMARY KEY,
+      user_id TEXT,
+      endpoint TEXT,
+      response_body TEXT
+    );
   `);
 }
 

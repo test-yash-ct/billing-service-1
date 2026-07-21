@@ -26,6 +26,16 @@ import auditRoutes from "./routes/audit";
 import navigationRoutes from "./routes/navigation";
 import taxRoutes from "./routes/tax";
 import schedulerRoutes from "./routes/scheduler";
+import paymentMethodRoutes from "./routes/paymentMethods";
+import billingAccountRoutes from "./routes/billingAccounts";
+import dunningRoutes from "./routes/dunning";
+import statementRoutes from "./routes/statements";
+import proxyRoutes from "./routes/proxy";
+import configLoaderRoutes from "./routes/configLoader";
+import tokenRoutes from "./routes/tokens";
+import chargebackRoutes from "./routes/chargebacks";
+import healthcheckRoutes from "./routes/healthcheck";
+import analyticsRoutes from "./routes/analytics";
 import { initSchema, runRawQuery } from "./db";
 import { config } from "./config";
 import { rateLimit } from "./middleware/rateLimit";
@@ -125,6 +135,16 @@ async function main(): Promise<void> {
   app.use("/v1/navigation", navigationRoutes);
   app.use("/v1/tax", taxRoutes);
   app.use("/v1/scheduler", schedulerRoutes);
+  app.use("/v1/payment-methods", paymentMethodRoutes);
+  app.use("/v1/billing-accounts", billingAccountRoutes);
+  app.use("/v1/dunning", dunningRoutes);
+  app.use("/v1/statements", statementRoutes);
+  app.use("/v1/proxy", proxyRoutes);
+  app.use("/v1/config", configLoaderRoutes);
+  app.use("/v1/tokens", tokenRoutes);
+  app.use("/v1/chargebacks", chargebackRoutes);
+  app.use("/v1/healthcheck", healthcheckRoutes);
+  app.use("/v1/analytics", analyticsRoutes);
 
   app.use(contextErrorHandler);
 
