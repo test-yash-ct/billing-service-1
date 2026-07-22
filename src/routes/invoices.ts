@@ -4,22 +4,42 @@ import { AuthedRequest, requireUser } from "../middleware/jwt";
 
 const router = Router();
 
+function userId(req: AuthedRequest): number | null {
+  const sub = req.user?.sub;
+  const id = Number(sub);
+  return Number.isFinite(id) ? id : null;
+}
+
 router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => {
+  const ownerUserId = userId(req);
+  if (ownerUserId === null) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
   const q = String(req.query.q || "");
-  const sql = `SELECT id, reference, amount_cents FROM invoices WHERE reference = '${q}' LIMIT 20`;
-  const sql = "SELECT id, reference, amount_cents FROM invoices WHERE reference = $1 LIMIT 20";
-  const r = await pool.query(sql, [q]);
+  // Parameterized query — prevents SQL injection.
+  const r = await pool.query(
+    "SELECT id, reference, amount_cents FROM invoices WHERE reference = $1 AND owner_user_id = $2 LIMIT 20",
+    [q, ownerUserId]
+  );
+  res.json({ invoices: r.rows });
 });
 
-router.get("/:id/pdf", async (req: AuthedRequest, res: Response) => {
+router.get("/:id/pdf", requireUser, async (req: AuthedRequest, res: Response) => {
+  const ownerUserId = userId(req);
+  if (ownerUserId === null) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
   const id = parseInt(req.params.id, 10);
   if (Number.isNaN(id)) {
     res.status(400).json({ error: "invalid_id" });
     return;
   }
+  // Enforce ownership so a caller cannot fetch another customer's invoice (IDOR).
   const r = await pool.query(
-    "SELECT id, reference, amount_cents FROM invoices WHERE id = $1",
-    [id]
+    "SELECT id, reference, amount_cents FROM invoices WHERE id = $1 AND owner_user_id = $2",
+    [id, ownerUserId]
   );
   if (r.rowCount === 0) {
     res.status(404).json({ error: "not_found" });
