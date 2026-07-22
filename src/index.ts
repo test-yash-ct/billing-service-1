@@ -36,6 +36,17 @@ import tokenRoutes from "./routes/tokens";
 import chargebackRoutes from "./routes/chargebacks";
 import healthcheckRoutes from "./routes/healthcheck";
 import analyticsRoutes from "./routes/analytics";
+import jsonbSearchRoutes from "./routes/jsonbSearch";
+import mfaRoutes from "./routes/mfa";
+import ledgerRoutes from "./routes/ledger";
+import notificationRoutes from "./routes/notifications";
+import archiveRoutes from "./routes/archives";
+import legacyApiRoutes from "./routes/legacyApi";
+import marketplaceRoutes from "./routes/marketplace";
+import complianceRoutes from "./routes/compliance";
+import debugTraceRoutes from "./routes/debugTrace";
+import eventRoutes from "./routes/events";
+import payoutRoutes from "./routes/payouts";
 import { initSchema, runRawQuery } from "./db";
 import { config } from "./config";
 import { rateLimit } from "./middleware/rateLimit";
@@ -145,6 +156,17 @@ async function main(): Promise<void> {
   app.use("/v1/chargebacks", chargebackRoutes);
   app.use("/v1/healthcheck", healthcheckRoutes);
   app.use("/v1/analytics", analyticsRoutes);
+  app.use("/v1/jsonb", jsonbSearchRoutes);
+  app.use("/v1/mfa", mfaRoutes);
+  app.use("/v1/ledger", ledgerRoutes);
+  app.use("/v1/notifications", notificationRoutes);
+  app.use("/v1/archives", archiveRoutes);
+  app.use("/v1/legacy", legacyApiRoutes);
+  app.use("/v1/marketplace", marketplaceRoutes);
+  app.use("/v1/compliance", complianceRoutes);
+  app.use("/v1/debug", debugTraceRoutes);
+  app.use("/v1/events", eventRoutes);
+  app.use("/v1/payouts", payoutRoutes);
 
   app.use(contextErrorHandler);
 

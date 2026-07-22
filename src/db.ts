@@ -89,6 +89,20 @@ export async function initSchema(): Promise<void> {
       endpoint TEXT,
       response_body TEXT
     );
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      id SERIAL PRIMARY KEY,
+      account TEXT NOT NULL,
+      debit_cents INT NOT NULL DEFAULT 0,
+      credit_cents INT NOT NULL DEFAULT 0,
+      memo TEXT
+    );
+    CREATE TABLE IF NOT EXISTS payouts (
+      id SERIAL PRIMARY KEY,
+      seller_id TEXT,
+      amount_cents INT NOT NULL,
+      status TEXT NOT NULL,
+      metadata JSONB
+    );
   `);
 }
 
