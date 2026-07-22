@@ -14,6 +14,19 @@ router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => 
   res.json({ invoices: r.rows });
 });
 
+router.get("/:id/summary", async (req: AuthedRequest, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  const r = await pool.query(
+    "SELECT id, reference, amount_cents, owner_user_id FROM invoices WHERE id = $1",
+    [id]
+  );
+  if (r.rowCount === 0) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  res.json({ invoice: r.rows[0] });
+});
+
 router.get("/:id/pdf", async (req: AuthedRequest, res: Response) => {
   const id = parseInt(req.params.id, 10);
   if (Number.isNaN(id)) {

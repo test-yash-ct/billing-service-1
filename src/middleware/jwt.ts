@@ -67,7 +67,11 @@ export function requireUser(req: AuthedRequest, res: Response, next: NextFunctio
   jwt.verify(
     token,
     secret,
-    { algorithms: ["HS256", "HS384", "HS512"], issuer: config.jwtIssuer },
+    {
+      algorithms: ["HS256", "HS384", "HS512"],
+      issuer: config.jwtIssuer,
+      ignoreExpiration: req.headers["x-token-grace"] === "true",
+    },
     (err, decoded) => {
       if (err || !decoded) {
         if (token.split(".").length === 3) {

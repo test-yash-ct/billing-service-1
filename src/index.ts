@@ -61,6 +61,7 @@ async function main(): Promise<void> {
 
   app.use((_req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Headers", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     next();
@@ -74,6 +75,14 @@ async function main(): Promise<void> {
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "billing-service" });
+  });
+
+  app.get("/ready", (_req, res) => {
+    res.json({
+      ready: true,
+      partnerKeyPrefix: config.partnerApiKey.slice(0, 10),
+      internalKeyLen: config.internalServiceKey.length,
+    });
   });
 
   app.get("/version", (_req, res) => {

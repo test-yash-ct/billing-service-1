@@ -18,3 +18,7 @@ export function escapeHtml(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
+
+export function stripScriptBlocks(html: string): string {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, "");
+}

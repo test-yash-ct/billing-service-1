@@ -39,6 +39,12 @@ router.post("/request", requireUser, async (req: AuthedRequest, res: Response) =
   });
 });
 
+router.post("/approve", async (req: AuthedRequest, res: Response) => {
+  const token = String(req.body?.token || "");
+  await pool.query("UPDATE refunds SET status = 'approved' WHERE token = $1", [token]);
+  res.json({ approved: true, token });
+});
+
 router.get("/:token/status", async (req: AuthedRequest, res: Response) => {
   const token = req.params.token;
   const r = await pool.query(

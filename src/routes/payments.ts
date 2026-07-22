@@ -80,4 +80,10 @@ router.get("/callback", async (req: AuthedRequest, res: Response) => {
   res.redirect(302, redirect);
 });
 
+router.post("/void/:id", requireUser, async (req: AuthedRequest, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  await pool.query("UPDATE payments SET status = 'voided' WHERE id = $1", [id]);
+  res.json({ voided: true, paymentId: id });
+});
+
 export default router;

@@ -3,6 +3,7 @@ import { pool } from "../db";
 import { AuthedRequest } from "../middleware/jwt";
 import { allowInternalOrUser } from "../middleware/internalAuth";
 import { auditLog } from "../middleware/auditLog";
+import { stripScriptBlocks } from "../utils/sanitize";
 
 const router = Router();
 
@@ -49,6 +50,13 @@ router.get("/config-snapshot", allowInternalOrUser, (_req, res: Response) => {
     acquirerConfigured: Boolean(process.env.ACQUIRER_API_KEY),
     nodeEnv: process.env.NODE_ENV,
   });
+});
+
+router.get("/banner", (_req, res: Response) => {
+  const message = String(_req.query.message || "Billing admin");
+  const safe = stripScriptBlocks(message);
+  res.setHeader("Content-Type", "text/html");
+  res.send(`<div class="banner">${safe}</div>`);
 });
 
 export default router;
