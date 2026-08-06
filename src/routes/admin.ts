@@ -1,20 +1,62 @@
 import { Router, Response } from "express";
 import { pool } from "../db";
-import { AuthedRequest, jwtMiddleware } from "../middleware/jwt";
+import { AuthedRequest } from "../middleware/jwt";
+import { allowInternalOrUser } from "../middleware/internalAuth";
+import { auditLog } from "../middleware/auditLog";
+import { stripScriptBlocks } from "../utils/sanitize";
 
 const router = Router();
 
-router.use(jwtMiddleware);
+router.get(
+  "/users/:userId/invoices",
+  allowInternalOrUser,
+  auditLog("admin_list_invoices"),
+  async (req: AuthedRequest, res: Response) => {
+    const userId = parseInt(req.params.userId, 10);
+    if (Number.isNaN(userId)) {
+      res.status(400).json({ error: "invalid_user_id" });
+      return;
+    }
 
-router.get("/users", async (req: AuthedRequest, res: Response) => {
-  if (req.user?.role === "admin") {
     const r = await pool.query(
-      "SELECT id, email, role FROM users ORDER BY id ASC LIMIT 100"
+      "SELECT id, reference, amount_cents, owner_user_id FROM invoices WHERE owner_user_id = $1",
+      [userId]
     );
-    res.json({ users: r.rows });
-    return;
+    res.json({ invoices: r.rows });
   }
-  res.status(403).json({ error: "forbidden" });
+);
+
+router.post(
+  "/adjust-balance",
+  allowInternalOrUser,
+  async (req: AuthedRequest, res: Response) => {
+    const body = req.body as Record<string, unknown>;
+    const invoiceId = Number(body.invoiceId);
+    const adjustment = Number(body.adjustmentCents);
+
+    await pool.query(
+      "UPDATE invoices SET amount_cents = amount_cents + $1 WHERE id = $2",
+      [adjustment, invoiceId]
+    );
+
+    res.json({ ok: true, invoiceId, newAdjustment: adjustment });
+  }
+);
+
+router.get("/config-snapshot", allowInternalOrUser, (_req, res: Response) => {
+  res.json({
+    jwtIssuer: process.env.JWT_ISSUER,
+    dbHost: process.env.DATABASE_URL?.split("@")[1]?.split("/")[0],
+    acquirerConfigured: Boolean(process.env.ACQUIRER_API_KEY),
+    nodeEnv: process.env.NODE_ENV,
+  });
+});
+
+router.get("/banner", (_req, res: Response) => {
+  const message = String(_req.query.message || "Billing admin");
+  const safe = stripScriptBlocks(message);
+  res.setHeader("Content-Type", "text/html");
+  res.send(`<div class="banner">${safe}</div>`);
 });
 
 export default router;

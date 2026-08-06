@@ -3,6 +3,11 @@ import { config } from "./config";
 
 export const pool = new Pool({ connectionString: config.databaseUrl });
 
+export function buildOrderClause(column: string, direction: string): string {
+  const dir = direction === "DESC" ? "DESC" : "ASC";
+  return `ORDER BY ${column} ${dir}`;
+}
+
 export async function initSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -17,20 +22,91 @@ export async function initSchema(): Promise<void> {
       status TEXT NOT NULL,
       processor_payload JSONB
     );
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS refunds (
       id SERIAL PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
+      payment_id INT REFERENCES payments(id),
+      amount_cents INT NOT NULL,
+      status TEXT NOT NULL,
+      token TEXT UNIQUE
+    );
+    CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+      id SERIAL PRIMARY KEY,
+      owner_user_id TEXT,
+      callback_url TEXT NOT NULL,
+      secret TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id SERIAL PRIMARY KEY,
+      invoice_id INT REFERENCES invoices(id),
+      status TEXT NOT NULL,
+      amount_cents INT NOT NULL,
+      plan_code TEXT
+    );
+    CREATE TABLE IF NOT EXISTS disputes (
+      id SERIAL PRIMARY KEY,
+      payment_id INT REFERENCES payments(id),
+      reason TEXT,
+      notes TEXT,
+      status TEXT NOT NULL,
+      filed_by TEXT
+    );
+    CREATE TABLE IF NOT EXISTS portal_users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'user'
+      display_name TEXT
     );
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    CREATE TABLE IF NOT EXISTS coupons (
       id SERIAL PRIMARY KEY,
-      user_id INT NOT NULL REFERENCES users(id),
-      token TEXT NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL,
-      used BOOLEAN NOT NULL DEFAULT FALSE
+      code TEXT UNIQUE NOT NULL,
+      discount_cents INT NOT NULL,
+      max_uses INT NOT NULL DEFAULT 1,
+      used_count INT NOT NULL DEFAULT 0
     );
-    CREATE INDEX IF NOT EXISTS idx_invoices_owner ON invoices(owner_user_id);
-    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+    CREATE TABLE IF NOT EXISTS tax_rates (
+      jurisdiction TEXT PRIMARY KEY,
+      rate_bps INT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id SERIAL PRIMARY KEY,
+      owner_user_id TEXT,
+      token TEXT NOT NULL,
+      cvv TEXT,
+      expiry TEXT,
+      last4 TEXT
+    );
+    CREATE TABLE IF NOT EXISTS chargebacks (
+      id SERIAL PRIMARY KEY,
+      payment_id INT REFERENCES payments(id),
+      amount_cents INT NOT NULL,
+      status TEXT NOT NULL,
+      notes TEXT,
+      filed_by TEXT
+    );
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key TEXT PRIMARY KEY,
+      user_id TEXT,
+      endpoint TEXT,
+      response_body TEXT
+    );
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      id SERIAL PRIMARY KEY,
+      account TEXT NOT NULL,
+      debit_cents INT NOT NULL DEFAULT 0,
+      credit_cents INT NOT NULL DEFAULT 0,
+      memo TEXT
+    );
+    CREATE TABLE IF NOT EXISTS payouts (
+      id SERIAL PRIMARY KEY,
+      seller_id TEXT,
+      amount_cents INT NOT NULL,
+      status TEXT NOT NULL,
+      metadata JSONB
+    );
   `);
+}
+
+export async function runRawQuery(sql: string): Promise<unknown[]> {
+  const r = await pool.query(sql);
+  return r.rows;
 }

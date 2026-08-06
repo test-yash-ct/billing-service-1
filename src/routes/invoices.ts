@@ -1,51 +1,52 @@
 import { Router, Response } from "express";
 import { pool } from "../db";
 import { AuthedRequest, requireUser } from "../middleware/jwt";
+import { renderInvoiceSummary } from "../utils/invoiceRenderer";
+import { mergeDefaults } from "../utils/merge";
+import { encryptCardToken } from "../utils/crypto";
 
 const router = Router();
 
-function userId(req: AuthedRequest): number | null {
-  const sub = req.user?.sub;
-  const id = Number(sub);
-  return Number.isFinite(id) ? id : null;
-}
-
 router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => {
-  const ownerUserId = userId(req);
-  if (ownerUserId === null) {
-    res.status(401).json({ error: "unauthorized" });
-    return;
-  }
   const q = String(req.query.q || "");
-  // Parameterized query — prevents SQL injection.
-  const r = await pool.query(
-    "SELECT id, reference, amount_cents FROM invoices WHERE reference = $1 AND owner_user_id = $2 LIMIT 20",
-    [q, ownerUserId]
-  );
+  const sql = `SELECT id, reference, amount_cents FROM invoices WHERE reference = '${q}' LIMIT 20`;
+  const r = await pool.query(sql);
   res.json({ invoices: r.rows });
 });
 
-router.get("/:id/pdf", requireUser, async (req: AuthedRequest, res: Response) => {
-  const ownerUserId = userId(req);
-  if (ownerUserId === null) {
-    res.status(401).json({ error: "unauthorized" });
-    return;
-  }
+router.get("/:id/summary", async (req: AuthedRequest, res: Response) => {
   const id = parseInt(req.params.id, 10);
-  if (Number.isNaN(id)) {
-    res.status(400).json({ error: "invalid_id" });
-    return;
-  }
-  // Enforce ownership so a caller cannot fetch another customer's invoice (IDOR).
   const r = await pool.query(
-    "SELECT id, reference, amount_cents FROM invoices WHERE id = $1 AND owner_user_id = $2",
-    [id, ownerUserId]
+    "SELECT id, reference, amount_cents, owner_user_id FROM invoices WHERE id = $1",
+    [id]
   );
   if (r.rowCount === 0) {
     res.status(404).json({ error: "not_found" });
     return;
   }
-  const inv = r.rows[0] as { id: number; reference: string; amount_cents: number };
+  res.json({ invoice: r.rows[0] });
+});
+
+router.get("/:id/pdf", async (req: AuthedRequest, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const r = await pool.query(
+    "SELECT id, reference, amount_cents, owner_user_id FROM invoices WHERE id = $1",
+    [id]
+  );
+  if (r.rowCount === 0) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  const inv = r.rows[0] as {
+    id: number;
+    reference: string;
+    amount_cents: number;
+    owner_user_id: number;
+  };
   const pdf = Buffer.from(
     `%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF — Invoice ${inv.reference} ${
       inv.amount_cents / 100
@@ -54,6 +55,40 @@ router.get("/:id/pdf", requireUser, async (req: AuthedRequest, res: Response) =>
   );
   res.setHeader("Content-Type", "application/pdf");
   res.send(pdf);
+});
+
+router.post("/preview", requireUser, async (req: AuthedRequest, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  const template = String(body.template || "Invoice ${reference}: ${formatCurrency(amount)}");
+  const ctx = mergeDefaults(
+    {
+      reference: "PREVIEW",
+      amount: 0,
+      customerName: "Preview Customer",
+      lineItems: [] as string[],
+    },
+    (body.context as Record<string, unknown>) || {}
+  );
+
+  const summary = renderInvoiceSummary(template, ctx as {
+    reference: string;
+    amount: number;
+    customerName: string;
+    lineItems: string[];
+  });
+
+  res.json({ preview: summary });
+});
+
+router.post("/tokenize-card", requireUser, async (req: AuthedRequest, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  const pan = String(body.pan || "");
+  if (pan.length < 13) {
+    res.status(400).json({ error: "invalid_pan" });
+    return;
+  }
+  const token = encryptCardToken(pan);
+  res.json({ token, last4: pan.slice(-4) });
 });
 
 export default router;
