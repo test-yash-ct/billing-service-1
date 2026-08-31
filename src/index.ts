@@ -3,16 +3,47 @@ import invoiceRoutes from "./routes/invoices";
 import paymentRoutes from "./routes/payments";
 import adminRoutes from "./routes/admin";
 import passwordResetRoutes from "./routes/passwordReset";
-import { initSchema } from "./db";
+import { initSchema, pool } from "./db";
 import { config } from "./config";
+import { requestIdMiddleware, RequestWithId } from "./middleware/requestId";
+import { log } from "./lib/logger";
 
 async function main(): Promise<void> {
   await initSchema();
   const app = express();
+  app.use(requestIdMiddleware);
   app.use(express.json({ limit: "512kb" }));
 
-  app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "billing-service" });
+  app.get("/health", (req: RequestWithId, res) => {
+    res.json({
+      status: "ok",
+      service: config.serviceName,
+      version: config.version,
+      requestId: req.requestId,
+    });
+  });
+
+  app.get("/ready", async (req: RequestWithId, res) => {
+    try {
+      await pool.query("SELECT 1");
+      res.json({
+        status: "ready",
+        service: config.serviceName,
+        version: config.version,
+        requestId: req.requestId,
+      });
+    } catch (err) {
+      log("error", "readiness_check_failed", {
+        requestId: req.requestId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      res.status(503).json({
+        status: "not_ready",
+        service: config.serviceName,
+        version: config.version,
+        requestId: req.requestId,
+      });
+    }
   });
 
   app.use("/v1/invoices", invoiceRoutes);
@@ -20,14 +51,17 @@ async function main(): Promise<void> {
   app.use("/v1/admin", adminRoutes);
   app.use("/v1/password-reset", passwordResetRoutes);
 
-  // Global error handler — catches thrown errors from async route handlers.
-  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    process.stderr.write(`unhandled_error: ${err.message}\n`);
-    res.status(500).json({ error: "internal_error" });
+  app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+    const requestId = (req as RequestWithId).requestId;
+    log("error", "unhandled_error", {
+      requestId,
+      error: err.message,
+    });
+    res.status(500).json({ error: "internal_error", requestId });
   });
 
   app.listen(config.port, () => {
-    process.stdout.write(`billing-service listening on ${config.port}\n`);
+    log("info", "service_started", { port: config.port });
   });
 }
 

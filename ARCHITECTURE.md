@@ -12,6 +12,11 @@
 |-------|------------|
 | HTTP API | Express on Node.js |
 | Persistence | PostgreSQL (`invoices`, `payments`) |
+| Observability | `X-Request-Id` middleware, JSON structured logs (`requestId`, `service`) |
+
+## Request correlation
+
+Inbound requests pass through request-id middleware before route handlers. The id is attached to `req.requestId`, echoed on responses, and included in structured logs across invoices, payments, admin, and password-reset flows.
 
 ## Platform integration
 

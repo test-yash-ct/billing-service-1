@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { pool } from "../db";
 import { AuthedRequest, requireUser } from "../middleware/jwt";
+import { log } from "../lib/logger";
 
 const router = Router();
 
@@ -14,10 +15,16 @@ function userId(req: AuthedRequest): number | null {
  * Redact the raw processor payload from logs. Request bodies may contain
  * cardholder/PCI-sensitive data, so we never log them verbatim.
  */
-function logCaptureRequest(userSub: unknown, invoiceId: unknown): void {
-  process.stdout.write(
-    `capture_request user=${String(userSub)} invoice_id=${String(invoiceId)}\n`
-  );
+function logCaptureRequest(
+  requestId: string | undefined,
+  userSub: unknown,
+  invoiceId: unknown
+): void {
+  log("info", "capture_request", {
+    requestId,
+    user: String(userSub),
+    invoiceId: String(invoiceId),
+  });
 }
 
 router.get("/:id/status", requireUser, async (req: AuthedRequest, res: Response) => {
@@ -59,7 +66,7 @@ router.post("/capture", requireUser, async (req: AuthedRequest, res: Response) =
     return;
   }
 
-  logCaptureRequest(req.user?.sub, invoiceId);
+  logCaptureRequest(req.requestId, req.user?.sub, invoiceId);
 
   // Idempotency: an optional client-supplied key lets retries return the
   // original result instead of creating a duplicate payment.

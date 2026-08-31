@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { pool } from "../db";
 import { AuthedRequest, requireUser } from "../middleware/jwt";
+import { log } from "../lib/logger";
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => 
     return;
   }
   const q = String(req.query.q || "");
+  log("info", "invoice_lookup", { requestId: req.requestId, queryLength: q.length });
   // Parameterized query — prevents SQL injection.
   const r = await pool.query(
     "SELECT id, reference, amount_cents FROM invoices WHERE reference = $1 AND owner_user_id = $2 LIMIT 20",

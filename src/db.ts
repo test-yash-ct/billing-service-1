@@ -1,9 +1,11 @@
 import { Pool } from "pg";
 import { config } from "./config";
+import { log } from "./lib/logger";
 
 export const pool = new Pool({ connectionString: config.databaseUrl });
 
-export async function initSchema(): Promise<void> {
+export async function initSchema(requestId?: string): Promise<void> {
+  log("info", "schema_init_start", { requestId });
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
       id SERIAL PRIMARY KEY,
@@ -33,4 +35,5 @@ export async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_invoices_owner ON invoices(owner_user_id);
     CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
   `);
+  log("info", "schema_init_complete", { requestId });
 }

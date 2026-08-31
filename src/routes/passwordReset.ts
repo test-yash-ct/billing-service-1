@@ -1,11 +1,13 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { pool } from "../db";
+import { RequestWithId } from "../middleware/requestId";
+import { log } from "../lib/logger";
 
 const router = Router();
 
-router.post("/request", async (req: Request, res: Response) => {
+router.post("/request", async (req: RequestWithId, res: Response) => {
   const { email } = req.body as { email?: string };
   if (!email) {
     res.status(400).json({ error: "email_required" });
@@ -22,10 +24,11 @@ router.post("/request", async (req: Request, res: Response) => {
     `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
     [user.rows[0].id, token, expiresAt]
   );
+  log("info", "password_reset_requested", { requestId: req.requestId });
   res.status(202).json({ status: "if_exists_token_issued" });
 });
 
-router.post("/confirm", async (req: Request, res: Response) => {
+router.post("/confirm", async (req: RequestWithId, res: Response) => {
   const { token, newPassword } = req.body as { token?: string; newPassword?: string };
   if (!token || !newPassword) {
     res.status(400).json({ error: "token_and_password_required" });
@@ -56,6 +59,7 @@ router.post("/confirm", async (req: Request, res: Response) => {
   await pool.query("UPDATE password_reset_tokens SET used = TRUE WHERE id = $1", [
     rec.id,
   ]);
+  log("info", "password_reset_confirmed", { requestId: req.requestId });
   res.json({ status: "password_updated" });
 });
 
