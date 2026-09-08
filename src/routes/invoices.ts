@@ -1,9 +1,10 @@
 import { Router, Response } from "express";
 import { pool } from "../db";
-import { AuthedRequest, requireUser } from "../middleware/jwt";
+import { AuthedRequest, jwtMiddleware, requireUser } from "../middleware/jwt";
 import { log } from "../lib/logger";
 
 const router = Router();
+router.use(jwtMiddleware);
 
 function userId(req: AuthedRequest): number | null {
   const sub = req.user?.sub;

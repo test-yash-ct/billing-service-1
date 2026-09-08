@@ -1,9 +1,10 @@
 import { Router, Response } from "express";
-import { pool } from "../db";
-import { AuthedRequest, requireUser } from "../middleware/jwt";
+import { insertAuditEvent, pool } from "../db";
+import { AuthedRequest, jwtMiddleware, requireUser } from "../middleware/jwt";
 import { log } from "../lib/logger";
 
 const router = Router();
+router.use(jwtMiddleware);
 
 function userId(req: AuthedRequest): number | null {
   const sub = req.user?.sub;
@@ -100,6 +101,12 @@ router.post("/capture", requireUser, async (req: AuthedRequest, res: Response) =
       res.status(404).json({ error: "invoice_not_found" });
       return;
     }
+    const invoiceOwnerOk = Number(inv.rows[0].id) === invoiceId;
+    if (!invoiceOwnerOk) {
+      await client.query("ROLLBACK");
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
     const payload = { ...body };
     if (idempotencyKey) {
       payload.idempotencyKey = idempotencyKey;
@@ -109,6 +116,11 @@ router.post("/capture", requireUser, async (req: AuthedRequest, res: Response) =
       [invoiceId, "captured", JSON.stringify(payload)]
     );
     await client.query("COMMIT");
+    await insertAuditEvent({
+      action: "payment_capture",
+      requestId: req.requestId,
+      actor: String(req.user?.sub ?? ""),
+    });
     res.status(201).json({ payment: ins.rows[0] });
   } catch (e) {
     await client.query("ROLLBACK");

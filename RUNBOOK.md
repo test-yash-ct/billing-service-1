@@ -20,7 +20,7 @@ Migrations are applied through the deployment pipeline. For emergency read-only 
 |----------|---------|-------------|
 | `SERVICE_NAME` | `billing-service` | Service identity in logs and health responses |
 | `LOG_LEVEL` | `info` | Minimum log level (`debug`, `info`, `warn`, `error`) |
-| `REQUEST_ID_HEADER` | `X-Request-Id` | Incoming/outgoing correlation header name |
+| `REQUEST_ID_HEADER` | `X-Request-Id` | Incoming/outgoing correlation header name (max 128 token chars `[A-Za-z0-9._-]`; invalid values are replaced with a UUID) |
 
 ## Probes
 

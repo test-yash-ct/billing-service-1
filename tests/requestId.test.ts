@@ -36,6 +36,11 @@ test("structured log includes requestId and service fields", async () => {
     assert.strictEqual(parsed.service, config.serviceName);
     assert.strictEqual(parsed.requestId, "rid-123");
     assert.strictEqual(parsed.message, "test_event");
+    log("info", "should_redact", { requestId: "rid-123", password: "secret", jwt: "abc" });
+    const redacted = JSON.parse(chunks[1]) as Record<string, unknown>;
+    assert.strictEqual(redacted.password, "[redacted]");
+    assert.strictEqual(redacted.jwt, "[redacted]");
+    assert.strictEqual(redacted.requestId, "rid-123");
   } finally {
     stdout.write = originalWrite;
   }
@@ -73,6 +78,36 @@ test("request id propagates through middleware chain", async () => {
     });
     assert.strictEqual(body.requestId, "chain-id-99");
     assert.strictEqual(body.downstream, "chain-id-99");
+  } finally {
+    server.close();
+  }
+});
+
+test("oversized or invalid X-Request-Id is replaced with a uuid", async () => {
+  const app = express();
+  app.use(requestIdMiddleware);
+  app.get("/probe", (req, res) => {
+    res.json({ requestId: (req as { requestId?: string }).requestId });
+  });
+  const { server, baseUrl } = await listen(app);
+  try {
+    const url = new URL("/probe", baseUrl);
+    const body = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      http
+        .get(
+          url,
+          { headers: { [config.requestIdHeader]: "bad id with spaces!!" } },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => {
+              data += c;
+            });
+            res.on("end", () => resolve(JSON.parse(data) as Record<string, unknown>));
+          }
+        )
+        .on("error", reject);
+    });
+    assert.match(String(body.requestId), /^[0-9a-f-]{36}$/i);
   } finally {
     server.close();
   }
