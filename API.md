@@ -24,6 +24,23 @@ Returns processor status for a payment attempt.
 
 Request body includes processor payload fields as returned by the acquirer SDK.
 
+Only `invoiceId`, `idempotencyKey`, and `processorRef` are persisted. Cardholder and secret fields are dropped in the domain layer.
+
+Response `201` (or `200` on idempotent replay):
+
+```json
+{
+  "payment": { "id": 1, "status": "captured" },
+  "event": {
+    "eventType": "payment.captured",
+    "sourceService": "billing-service",
+    "occurredAt": "2026-09-10T08:00:00.000Z",
+    "requestId": "<uuid>",
+    "payload": { "paymentId": 1, "invoiceId": 42, "status": "captured" }
+  }
+}
+```
+
 ## Health
 
 ### GET /health

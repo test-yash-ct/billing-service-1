@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
-import { pool } from "../db";
 import { AuthedRequest, jwtMiddleware, requireUser } from "../middleware/jwt";
 import { log } from "../lib/logger";
+import { getOwnedInvoice, lookupInvoicesByReference } from "../domain/invoices";
+import { DomainError } from "../domain/payments";
 
 const router = Router();
 router.use(jwtMiddleware);
@@ -12,6 +13,14 @@ function userId(req: AuthedRequest): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
+function sendDomainError(res: Response, err: unknown): boolean {
+  if (err instanceof DomainError) {
+    res.status(err.httpStatus).json({ error: err.code });
+    return true;
+  }
+  return false;
+}
+
 router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => {
   const ownerUserId = userId(req);
   if (ownerUserId === null) {
@@ -20,12 +29,15 @@ router.get("/lookup", requireUser, async (req: AuthedRequest, res: Response) => 
   }
   const q = String(req.query.q || "");
   log("info", "invoice_lookup", { requestId: req.requestId, queryLength: q.length });
-  // Parameterized query — prevents SQL injection.
-  const r = await pool.query(
-    "SELECT id, reference, amount_cents FROM invoices WHERE reference = $1 AND owner_user_id = $2 LIMIT 20",
-    [q, ownerUserId]
-  );
-  res.json({ invoices: r.rows });
+  try {
+    const invoices = await lookupInvoicesByReference({ ownerUserId, reference: q });
+    res.json({ invoices });
+  } catch (err) {
+    if (sendDomainError(res, err)) {
+      return;
+    }
+    throw err;
+  }
 });
 
 router.get("/:id/pdf", requireUser, async (req: AuthedRequest, res: Response) => {
@@ -39,24 +51,22 @@ router.get("/:id/pdf", requireUser, async (req: AuthedRequest, res: Response) =>
     res.status(400).json({ error: "invalid_id" });
     return;
   }
-  // Enforce ownership so a caller cannot fetch another customer's invoice (IDOR).
-  const r = await pool.query(
-    "SELECT id, reference, amount_cents FROM invoices WHERE id = $1 AND owner_user_id = $2",
-    [id, ownerUserId]
-  );
-  if (r.rowCount === 0) {
-    res.status(404).json({ error: "not_found" });
-    return;
+  try {
+    const inv = await getOwnedInvoice({ ownerUserId, invoiceId: id });
+    const pdf = Buffer.from(
+      `%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF — Invoice ${inv.reference} ${
+        inv.amount_cents / 100
+      }`,
+      "utf8"
+    );
+    res.setHeader("Content-Type", "application/pdf");
+    res.send(pdf);
+  } catch (err) {
+    if (sendDomainError(res, err)) {
+      return;
+    }
+    throw err;
   }
-  const inv = r.rows[0] as { id: number; reference: string; amount_cents: number };
-  const pdf = Buffer.from(
-    `%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF — Invoice ${inv.reference} ${
-      inv.amount_cents / 100
-    }`,
-    "utf8"
-  );
-  res.setHeader("Content-Type", "application/pdf");
-  res.send(pdf);
 });
 
 export default router;
