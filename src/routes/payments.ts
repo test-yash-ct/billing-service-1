@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
-import { insertAuditEvent, pool } from "../db";
 import { AuthedRequest, jwtMiddleware, requireUser } from "../middleware/jwt";
 import { log } from "../lib/logger";
+import { capturePayment, DomainError, getPaymentStatus } from "../domain/payments";
 
 const router = Router();
 router.use(jwtMiddleware);
@@ -12,10 +12,6 @@ function userId(req: AuthedRequest): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
-/**
- * Redact the raw processor payload from logs. Request bodies may contain
- * cardholder/PCI-sensitive data, so we never log them verbatim.
- */
 function logCaptureRequest(
   requestId: string | undefined,
   userSub: unknown,
@@ -26,6 +22,14 @@ function logCaptureRequest(
     user: String(userSub),
     invoiceId: String(invoiceId),
   });
+}
+
+function sendDomainError(res: Response, err: unknown): boolean {
+  if (err instanceof DomainError) {
+    res.status(err.httpStatus).json({ error: err.code });
+    return true;
+  }
+  return false;
 }
 
 router.get("/:id/status", requireUser, async (req: AuthedRequest, res: Response) => {
@@ -39,19 +43,15 @@ router.get("/:id/status", requireUser, async (req: AuthedRequest, res: Response)
     res.status(400).json({ error: "invalid_id" });
     return;
   }
-  // Join through invoices to enforce ownership of the payment's invoice.
-  const r = await pool.query(
-    `SELECT p.id, p.invoice_id, p.status, p.processor_payload
-       FROM payments p
-       JOIN invoices i ON i.id = p.invoice_id
-      WHERE p.id = $1 AND i.owner_user_id = $2`,
-    [id, ownerUserId]
-  );
-  if (r.rowCount === 0) {
-    res.status(404).json({ error: "not_found" });
-    return;
+  try {
+    const payment = await getPaymentStatus({ paymentId: id, ownerUserId });
+    res.json({ payment });
+  } catch (err) {
+    if (sendDomainError(res, err)) {
+      return;
+    }
+    throw err;
   }
-  res.json({ payment: r.rows[0] });
 });
 
 router.post("/capture", requireUser, async (req: AuthedRequest, res: Response) => {
@@ -69,64 +69,27 @@ router.post("/capture", requireUser, async (req: AuthedRequest, res: Response) =
 
   logCaptureRequest(req.requestId, req.user?.sub, invoiceId);
 
-  // Idempotency: an optional client-supplied key lets retries return the
-  // original result instead of creating a duplicate payment.
   const idempotencyKey =
     typeof body.idempotencyKey === "string" ? body.idempotencyKey : null;
 
-  if (idempotencyKey) {
-    const existing = await pool.query(
-      `SELECT id, status FROM payments
-        WHERE invoice_id = $1 AND processor_payload->>'idempotencyKey' = $2
-        LIMIT 1`,
-      [invoiceId, idempotencyKey]
-    );
-    if (existing.rowCount && existing.rowCount > 0) {
-      res.status(200).json({ payment: existing.rows[0] });
-      return;
-    }
-  }
-
-  // Verify the invoice exists and belongs to the caller before recording a
-  // payment against it, inside a transaction so the insert is atomic.
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    const inv = await client.query(
-      "SELECT id FROM invoices WHERE id = $1 AND owner_user_id = $2 FOR SHARE",
-      [invoiceId, ownerUserId]
-    );
-    if (inv.rowCount === 0) {
-      await client.query("ROLLBACK");
-      res.status(404).json({ error: "invoice_not_found" });
-      return;
-    }
-    const invoiceOwnerOk = Number(inv.rows[0].id) === invoiceId;
-    if (!invoiceOwnerOk) {
-      await client.query("ROLLBACK");
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-    const payload = { ...body };
-    if (idempotencyKey) {
-      payload.idempotencyKey = idempotencyKey;
-    }
-    const ins = await client.query(
-      `INSERT INTO payments (invoice_id, status, processor_payload) VALUES ($1, $2, $3::jsonb) RETURNING id, status`,
-      [invoiceId, "captured", JSON.stringify(payload)]
-    );
-    await client.query("COMMIT");
-    await insertAuditEvent({
-      action: "payment_capture",
-      requestId: req.requestId,
+    const result = await capturePayment({
+      ownerUserId,
+      invoiceId,
+      idempotencyKey,
+      body,
+      requestId: req.requestId || "unknown",
       actor: String(req.user?.sub ?? ""),
     });
-    res.status(201).json({ payment: ins.rows[0] });
-  } catch (e) {
-    await client.query("ROLLBACK");
-    throw e;
-  } finally {
-    client.release();
+    res.status(result.created ? 201 : 200).json({
+      payment: result.payment,
+      event: result.event,
+    });
+  } catch (err) {
+    if (sendDomainError(res, err)) {
+      return;
+    }
+    throw err;
   }
 });
 
