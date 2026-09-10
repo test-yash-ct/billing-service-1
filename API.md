@@ -27,3 +27,19 @@ Request body includes processor payload fields as returned by the acquirer SDK.
 ## Health
 
 ### GET /health
+
+Liveness probe. Response:
+
+```json
+{ "status": "ok", "service": "billing-service", "version": "1.0.1", "requestId": "<uuid>" }
+```
+
+Echoes `X-Request-Id` on the response when provided.
+
+### GET /ready
+
+Readiness probe. Returns `503` when the database is unreachable.
+
+## Request correlation
+
+Clients may send `X-Request-Id` on any request. The value is propagated through handlers, database helpers, and structured logs as `requestId`.

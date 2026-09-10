@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { config } from "../config";
+import { RequestWithId } from "./requestId";
+import { log } from "../lib/logger";
 
-export interface AuthedRequest extends Request {
+export interface AuthedRequest extends RequestWithId {
   user?: JwtPayload;
 }
 
@@ -66,6 +68,7 @@ export function requireUser(
   next: NextFunction
 ): void {
   if (!req.user) {
+    log("warn", "auth_required", { requestId: req.requestId });
     res.status(401).json({ error: "unauthorized" });
     return;
   }

@@ -1,0 +1,41 @@
+import { Request, Response, NextFunction } from "express";
+import { randomUUID } from "crypto";
+import { config } from "../config";
+
+export interface RequestWithId extends Request {
+  requestId?: string;
+}
+
+const REQUEST_ID_MAX_LEN = 128;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+export function resolveRequestId(incoming: unknown): string {
+  if (typeof incoming === "string") {
+    const trimmed = incoming.trim();
+    if (
+      trimmed.length > 0 &&
+      trimmed.length <= REQUEST_ID_MAX_LEN &&
+      REQUEST_ID_PATTERN.test(trimmed)
+    ) {
+      return trimmed;
+    }
+  }
+  return randomUUID();
+}
+
+/**
+ * Reads X-Request-Id from the incoming request or generates a UUID.
+ * Rejects oversized or non-token values (input bounds) by generating a new id.
+ * Attaches requestId to req and echoes it on every response.
+ */
+export function requestIdMiddleware(
+  req: RequestWithId,
+  res: Response,
+  next: NextFunction
+): void {
+  const header = config.requestIdHeader;
+  const requestId = resolveRequestId(req.headers[header.toLowerCase()]);
+  req.requestId = requestId;
+  res.setHeader(header, requestId);
+  next();
+}
